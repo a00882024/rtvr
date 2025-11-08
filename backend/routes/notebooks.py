@@ -20,18 +20,19 @@ def get_notebook(notebook_id):
     Retrieve a single notebook by ID
 
     param notebook_id: ID of the notebook to retrieve
+    param include_documents: Query parameter to include documents (optional)
 
     return: The notebook as a JSON object
     """
     notebook = Notebook.query.get_or_404(notebook_id)
-    return jsonify(notebook.to_dict())
+    include_documents = request.args.get('include_documents', 'false').lower() == 'true'
+    return jsonify(notebook.to_dict(include_documents=include_documents))
 
 @notebooks_bp.route('/notebooks', methods=['POST'])
 def create_notebook():
     """
     Create a new notebook
 
-    param owner_user_id: ID of the user who owns the notebook
     param title: Title of the notebook
     param description: Description of the notebook
     param visibility: Visibility level of the notebook
@@ -43,7 +44,6 @@ def create_notebook():
     """
     data = request.get_json()
     new_notebook = Notebook(
-        owner_user_id=data['owner_user_id'],
         title=data['title'],
         description=data.get('description'),
         visibility=data.get('visibility', 0),
@@ -61,7 +61,6 @@ def update_notebook(notebook_id):
     Update an existing notebook
 
     param notebook_id: ID of the notebook to update
-    param owner_user_id: (Optional) New owner user ID
     param title: (Optional) New title of the notebook
     param description: (Optional) New description of the notebook
     param visibility: (Optional) New visibility level
@@ -73,7 +72,6 @@ def update_notebook(notebook_id):
     """
     data = request.get_json()
     notebook = Notebook.query.get_or_404(notebook_id)
-    notebook.owner_user_id = data.get('owner_user_id', notebook.owner_user_id)
     notebook.title = data.get('title', notebook.title)
     notebook.description = data.get('description', notebook.description)
     notebook.visibility = data.get('visibility', notebook.visibility)
@@ -87,6 +85,7 @@ def update_notebook(notebook_id):
 def delete_notebook(notebook_id):
     """
     Delete a notebook by ID
+    Note: This will also delete all documents associated with this notebook
 
     param notebook_id: ID of the notebook to delete
     """
@@ -94,3 +93,15 @@ def delete_notebook(notebook_id):
     db.session.delete(notebook)
     db.session.commit()
     return jsonify({"message": "Notebook Deleted"}), 200
+
+@notebooks_bp.route('/notebooks/<int:notebook_id>/documents', methods=['GET'])
+def get_notebook_documents(notebook_id):
+    """
+    Retrieve all documents belonging to a specific notebook
+
+    param notebook_id: ID of the notebook
+
+    return: A list of documents as JSON objects
+    """
+    notebook = Notebook.query.get_or_404(notebook_id)
+    return jsonify([doc.to_dict() for doc in notebook.documents])

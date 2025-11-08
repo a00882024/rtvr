@@ -38,6 +38,7 @@ def create_document():
     param file_type: Type of the file
     param file_size: Size of the file in bytes
     param processed: Boolean indicating if the document has been processed
+    param notebook_id: (Optional) ID of the notebook this document belongs to
 
     return: The created document as a JSON object
     """
@@ -49,7 +50,8 @@ def create_document():
         file_name=data['file_name'],
         file_type=data['file_type'],
         file_size=data['file_size'],
-        processed=data.get('processed', False)
+        processed=data.get('processed', False),
+        notebook_id=data.get('notebook_id')
     )
     db.session.add(new_document)
     db.session.commit()
@@ -68,6 +70,7 @@ def update_document(document_id):
     param file_type: (Optional) New type of the file
     param file_size: (Optional) New size of the file in bytes
     param processed: (Optional) Boolean indicating if the document has been processed
+    param notebook_id: (Optional) New notebook ID to assign the document to
 
     return: The updated document as a JSON object
     """
@@ -80,6 +83,7 @@ def update_document(document_id):
     document.file_type = data.get('file_type', document.file_type)
     document.file_size = data.get('file_size', document.file_size)
     document.processed = data.get('processed', document.processed)
+    document.notebook_id = data.get('notebook_id', document.notebook_id)
     db.session.commit()
     return jsonify(document.to_dict())
 

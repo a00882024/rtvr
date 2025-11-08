@@ -11,6 +11,7 @@ class Document(db.Model):
     param file_type: Type of the file
     param file_size: Size of the file in bytes
     param processed: Boolean indicating if the document has been processed by AI
+    param notebook_id: ID of the notebook this document belongs to (optional)
     """
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
@@ -20,6 +21,9 @@ class Document(db.Model):
     file_type = db.Column(db.String(50), nullable=False)
     file_size = db.Column(db.Integer, nullable=False)
     processed = db.Column(db.Boolean, default=False)
+
+    # Foreign key: A document can belong to one notebook
+    notebook_id = db.Column(db.Integer, db.ForeignKey('notebook.id'), nullable=True)
 
     def __repr__(self):
         return f'<Document {self.title}>'
@@ -33,6 +37,7 @@ class Document(db.Model):
             'file_name': self.file_name,
             'file_type': self.file_type,
             'file_size': self.file_size,
-            'processed': self.processed
+            'processed': self.processed,
+            'notebook_id': self.notebook_id
         }
 
