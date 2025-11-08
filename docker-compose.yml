@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  rtvr:
+    image: postgres:15-alpine
+    container_name: rtvr
+    environment:
+      POSTGRES_USER: rtvr_user
+      POSTGRES_PASSWORD: rtvr_password
+      POSTGRES_DB: rtvr_db
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
