@@ -1,7 +1,9 @@
 from flask import Flask
 from database import db
 from routes.documents import documents_bp
+from routes.notebooks import notebooks_bp
 from models.document import Document
+from models.notebook import Notebook
 
 
 # Initialize Flask app and database
@@ -13,6 +15,7 @@ db.init_app(app)
 
 # Register blueprints
 app.register_blueprint(documents_bp)
+app.register_blueprint(notebooks_bp)
 
 # Create database tables
 with app.app_context():
