@@ -13,6 +13,112 @@ RTVR es un sistema de gestión de documentos y notebooks construido con Flask (b
 
 ## Arquitectura
 
+### Diagrama de Arquitectura
+
+```mermaid
+graph TB
+    subgraph "Cliente"
+        Browser[Navegador Web]
+    end
+
+    subgraph "Frontend - React Router v7"
+        UI[Interfaz de Usuario]
+        Routes[Rutas]
+        API_Client[Cliente API]
+    end
+
+    subgraph "Backend - Flask"
+        Flask_App[Aplicación Flask]
+        Blueprints[Blueprints]
+
+        subgraph "Blueprints"
+            Notebooks_BP[Notebooks Routes]
+            Documents_BP[Documents Routes]
+        end
+
+        subgraph "Models"
+            Notebook_Model[Notebook Model]
+            Document_Model[Document Model]
+        end
+
+        SQLAlchemy[SQLAlchemy ORM]
+        MinIO_Client[Cliente MinIO]
+    end
+
+    subgraph "Infraestructura - Docker"
+        PostgreSQL[(PostgreSQL 15)]
+        MinIO_Storage[MinIO Object Storage]
+        MinIO_Console[MinIO Console]
+    end
+
+    Browser --> UI
+    UI --> Routes
+    Routes --> API_Client
+    API_Client -->|HTTP/REST API v1| Flask_App
+
+    Flask_App --> Blueprints
+    Blueprints --> Notebooks_BP
+    Blueprints --> Documents_BP
+
+    Notebooks_BP --> Notebook_Model
+    Documents_BP --> Document_Model
+    Documents_BP --> MinIO_Client
+
+    Notebook_Model --> SQLAlchemy
+    Document_Model --> SQLAlchemy
+
+    SQLAlchemy -->|SQL Queries| PostgreSQL
+    MinIO_Client -->|S3 API| MinIO_Storage
+
+    MinIO_Storage -.->|Gestión| MinIO_Console
+
+    style Browser fill:#e1f5ff
+    style UI fill:#fff3cd
+    style Flask_App fill:#d4edda
+    style PostgreSQL fill:#f8d7da
+    style MinIO_Storage fill:#d1ecf1
+    style MinIO_Console fill:#d1ecf1
+```
+
+### Flujo de Datos
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant F as Frontend
+    participant API as Flask API
+    participant DB as PostgreSQL
+    participant S3 as MinIO
+
+    Note over U,S3: Crear Notebook
+    U->>F: Completa formulario de notebook
+    F->>API: POST /v1/notebooks
+    API->>DB: INSERT notebook
+    DB-->>API: Notebook creado
+    API-->>F: JSON response
+    F-->>U: Muestra notebook creado
+
+    Note over U,S3: Subir Documento
+    U->>F: Selecciona archivo .txt
+    F->>API: POST /v1/documents (FormData)
+    API->>S3: PUT object (archivo)
+    S3-->>API: Confirmación
+    API->>DB: INSERT document metadata
+    DB-->>API: Document creado
+    API-->>F: JSON response
+    F-->>U: Muestra documento creado
+
+    Note over U,S3: Descargar Documento
+    U->>F: Click en descargar
+    F->>API: GET /v1/documents/:id/download
+    API->>DB: SELECT document metadata
+    DB-->>API: Metadata del documento
+    API->>S3: GET object
+    S3-->>API: Contenido del archivo
+    API-->>F: Archivo
+    F-->>U: Descarga archivo
+```
+
 ### Backend (Flask)
 
 El backend sigue una arquitectura Flask modular:
