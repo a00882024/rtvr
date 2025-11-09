@@ -25,9 +25,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
 
-# Register blueprints
-app.register_blueprint(documents_bp)
-app.register_blueprint(notebooks_bp)
+# Register blueprints with v1 prefix
+app.register_blueprint(documents_bp, url_prefix='/v1')
+app.register_blueprint(notebooks_bp, url_prefix='/v1')
 
 # Create database tables
 with app.app_context():
