@@ -1,4 +1,5 @@
 from flask import Flask
+from flask_cors import CORS
 from database import db
 from routes.documents import documents_bp
 from routes.notebooks import notebooks_bp
@@ -12,6 +13,9 @@ load_dotenv()
 
 # Initialize Flask app and database
 app = Flask(__name__)
+
+# Enable CORS for frontend development
+CORS(app, resources={r"/v1/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}})
 
 # PostgreSQL configuration
 DB_USER = os.getenv('DB_USER', 'rtvr_user')
