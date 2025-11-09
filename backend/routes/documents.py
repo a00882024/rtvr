@@ -2,7 +2,10 @@ from flask import Blueprint, jsonify, request, current_app
 from werkzeug.utils import secure_filename
 from database import db
 from models.document import Document
+from minio.error import S3Error
 import os
+import io
+import uuid
 
 documents_bp = Blueprint('documents', __name__)
 
@@ -80,20 +83,36 @@ def create_document():
         filename = secure_filename(file.filename)
 
         # Create a unique filename to avoid conflicts
-        import uuid
         unique_filename = f"{uuid.uuid4()}_{filename}"
 
-        # Save the file
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
-        file.save(file_path)
+        # Get MinIO client and bucket name from app config
+        minio_client = current_app.config['MINIO_CLIENT']
+        bucket_name = current_app.config['MINIO_BUCKET_NAME']
+
+        # Upload file to MinIO
+        try:
+            # Read file content
+            file_content = file.read()
+            file_size = len(file_content)
+
+            # Upload to MinIO
+            minio_client.put_object(
+                bucket_name,
+                unique_filename,
+                io.BytesIO(file_content),
+                file_size,
+                content_type='text/plain'
+            )
+        except S3Error as e:
+            return jsonify({"error": f"Failed to upload file to storage: {str(e)}"}), 500
 
         new_document = Document(
             title=data['title'],
             description=data.get('description'),
             extracted_content=data.get('extracted_content', ''),
-            file_name=filename,  # Store original filename
+            file_name=unique_filename,  # Store unique filename for MinIO
             file_type=data.get('file_type', 'txt'),
-            file_size=int(data.get('file_size', 0)),
+            file_size=file_size,
             processed=data.get('processed', 'false').lower() == 'true',
             notebook_id=int(data['notebook_id']) if data.get('notebook_id') else None
         )
@@ -140,6 +159,53 @@ def delete_document(document_id):
     param document_id: ID of the document to delete
     """
     document = Document.query.get_or_404(document_id)
+
+    # Delete file from MinIO if it exists
+    if document.file_name:
+        minio_client = current_app.config['MINIO_CLIENT']
+        bucket_name = current_app.config['MINIO_BUCKET_NAME']
+        try:
+            minio_client.remove_object(bucket_name, document.file_name)
+        except S3Error as e:
+            # Log error but continue with database deletion
+            print(f"Failed to delete file from MinIO: {e}")
+
     db.session.delete(document)
     db.session.commit()
     return jsonify({"message": "Document Deleted"}), 200
+
+@documents_bp.route('/documents/<int:document_id>/download', methods=['GET'])
+def download_document(document_id):
+    """
+    Download a document file from MinIO
+
+    param document_id: ID of the document to download
+
+    return: The file content
+    """
+    from flask import Response
+
+    document = Document.query.get_or_404(document_id)
+
+    if not document.file_name:
+        return jsonify({"error": "Document has no associated file"}), 404
+
+    minio_client = current_app.config['MINIO_CLIENT']
+    bucket_name = current_app.config['MINIO_BUCKET_NAME']
+
+    try:
+        # Get object from MinIO
+        response = minio_client.get_object(bucket_name, document.file_name)
+        file_content = response.read()
+        response.close()
+        response.release_conn()
+
+        return Response(
+            file_content,
+            mimetype='text/plain',
+            headers={
+                'Content-Disposition': f'attachment; filename={document.file_name}'
+            }
+        )
+    except S3Error as e:
+        return jsonify({"error": f"Failed to retrieve file: {str(e)}"}), 500

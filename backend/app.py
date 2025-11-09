@@ -7,6 +7,8 @@ from models.document import Document
 from models.notebook import Notebook
 import os
 from dotenv import load_dotenv
+from minio import Minio
+from minio.error import S3Error
 
 # Load environment variables
 load_dotenv()
@@ -35,15 +37,44 @@ app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_FILE_SIZE', 16 * 1024 * 10
 # Create upload folder if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# MinIO configuration
+MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', '127.0.0.1:9000')
+MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', 'rtvr_minio')
+MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', 'rtvr_minio_password')
+MINIO_BUCKET_NAME = os.getenv('MINIO_BUCKET_NAME', 'rtvr-documents')
+MINIO_SECURE = os.getenv('MINIO_SECURE', 'False').lower() == 'true'
+
+# Initialize MinIO client
+minio_client = Minio(
+    MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=MINIO_SECURE
+)
+
+# Store MinIO client and bucket name in app config for access in routes
+app.config['MINIO_CLIENT'] = minio_client
+app.config['MINIO_BUCKET_NAME'] = MINIO_BUCKET_NAME
+
 db.init_app(app)
 
 # Register blueprints with v1 prefix
 app.register_blueprint(documents_bp, url_prefix='/v1')
 app.register_blueprint(notebooks_bp, url_prefix='/v1')
 
-# Create database tables
+# Create database tables and MinIO bucket
 with app.app_context():
     db.create_all()
+
+    # Create MinIO bucket if it doesn't exist
+    try:
+        if not minio_client.bucket_exists(MINIO_BUCKET_NAME):
+            minio_client.make_bucket(MINIO_BUCKET_NAME)
+            print(f"Created MinIO bucket: {MINIO_BUCKET_NAME}")
+        else:
+            print(f"MinIO bucket already exists: {MINIO_BUCKET_NAME}")
+    except S3Error as e:
+        print(f"Error creating MinIO bucket: {e}")
 
 # Define a simple route to test the API
 @app.route('/')
