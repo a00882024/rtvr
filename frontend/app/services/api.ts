@@ -107,6 +107,33 @@ class ApiService {
   async getDocument(id: number): Promise<Document> {
     return this.fetchJson<Document>(`/v1/documents/${id}`);
   }
+
+  async createDocument(data: FormData): Promise<Document> {
+    const response = await fetch(`${this.baseUrl}/v1/documents`, {
+      method: 'POST',
+      body: data,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
+      throw new Error(error.message || `HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async updateDocument(id: number, data: Partial<Document>): Promise<Document> {
+    return this.fetchJson<Document>(`/v1/documents/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteDocument(id: number): Promise<{ message: string }> {
+    return this.fetchJson<{ message: string }>(`/v1/documents/${id}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const api = new ApiService();

@@ -37,6 +37,9 @@ env/
 instance/
 .webassets-cache
 
+# Uploads
+backend/uploads/
+
 # Database
 *.db
 *.sqlite

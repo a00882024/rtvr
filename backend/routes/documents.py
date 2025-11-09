@@ -1,8 +1,15 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
+from werkzeug.utils import secure_filename
 from database import db
 from models.document import Document
+import os
 
 documents_bp = Blueprint('documents', __name__)
+
+ALLOWED_EXTENSIONS = {'txt'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @documents_bp.route('/documents', methods=['GET'])
 def get_documents():
@@ -31,6 +38,9 @@ def create_document():
     """
     Create a new document
 
+    Accepts either JSON or multipart/form-data
+    For file uploads, the file will be saved and content extracted
+
     param title: Title of the document
     param description: Description of the document
     param extracted_content: Extracted content of the document
@@ -42,17 +52,52 @@ def create_document():
 
     return: The created document as a JSON object
     """
-    data = request.get_json()
-    new_document = Document(
-        title=data['title'],
-        description=data.get('description'),
-        extracted_content=data['extracted_content'],
-        file_name=data['file_name'],
-        file_type=data['file_type'],
-        file_size=data['file_size'],
-        processed=data.get('processed', False),
-        notebook_id=data.get('notebook_id')
-    )
+    # Handle JSON request
+    if request.is_json:
+        data = request.get_json()
+        new_document = Document(
+            title=data['title'],
+            description=data.get('description'),
+            extracted_content=data['extracted_content'],
+            file_name=data['file_name'],
+            file_type=data['file_type'],
+            file_size=data['file_size'],
+            processed=data.get('processed', False),
+            notebook_id=data.get('notebook_id')
+        )
+    # Handle form data with file upload
+    else:
+        data = request.form
+        file = request.files.get('file')
+
+        if not file:
+            return jsonify({"error": "No file provided"}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({"error": "File type not allowed. Only .txt files are supported"}), 400
+
+        # Secure the filename
+        filename = secure_filename(file.filename)
+
+        # Create a unique filename to avoid conflicts
+        import uuid
+        unique_filename = f"{uuid.uuid4()}_{filename}"
+
+        # Save the file
+        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+        file.save(file_path)
+
+        new_document = Document(
+            title=data['title'],
+            description=data.get('description'),
+            extracted_content=data.get('extracted_content', ''),
+            file_name=filename,  # Store original filename
+            file_type=data.get('file_type', 'txt'),
+            file_size=int(data.get('file_size', 0)),
+            processed=data.get('processed', 'false').lower() == 'true',
+            notebook_id=int(data['notebook_id']) if data.get('notebook_id') else None
+        )
+
     db.session.add(new_document)
     db.session.commit()
     return jsonify(new_document.to_dict()), 201
