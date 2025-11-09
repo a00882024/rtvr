@@ -81,3 +81,6 @@ frontend/.pnp.js
 # OS
 .DS_Store
 Thumbs.db
+
+# other files
+CLAUDE.md
