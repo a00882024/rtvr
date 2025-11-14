@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 from werkzeug.utils import secure_filename
 from database import db
 from models.document import Document
+from models.question import Question
 from minio.error import S3Error
 from services.openai_service import openai_service
 import os
@@ -32,10 +33,10 @@ def get_document(document_id):
 
     param document_id: ID of the document to retrieve
 
-    return: The document as a JSON object
+    return: The document as a JSON object with questions included
     """
     document = Document.query.get_or_404(document_id)
-    return jsonify(document.to_dict())
+    return jsonify(document.to_dict(include_questions=True))
 
 @documents_bp.route('/documents', methods=['POST'])
 def create_document():
@@ -264,3 +265,110 @@ def generate_summary(document_id):
         return jsonify({"error": f"Failed to retrieve file from storage: {str(e)}"}), 500
     except UnicodeDecodeError:
         return jsonify({"error": "File content is not valid UTF-8 text"}), 400
+
+@documents_bp.route('/documents/<int:document_id>/questions', methods=['POST'])
+def generate_questions(document_id):
+    """
+    Generate multiple choice questions for a document using OpenAI API
+
+    The questions are generated from the file content stored in MinIO bucket.
+    Supports chunking for large documents.
+
+    Query parameters:
+    - num_questions (optional): Number of questions to generate (default: 5)
+    - regenerate (optional): If true, delete existing questions and regenerate (default: false)
+
+    param document_id: ID of the document to generate questions for
+
+    return: The updated document with the generated questions
+    """
+    document = Document.query.get_or_404(document_id)
+
+    if not document.file_name:
+        return jsonify({"error": "Document has no associated file"}), 400
+
+    # Get query parameters
+    num_questions = request.args.get('num_questions', default=5, type=int)
+    regenerate = request.args.get('regenerate', default='false', type=str).lower() == 'true'
+
+    # Validate num_questions
+    if num_questions < 1 or num_questions > 20:
+        return jsonify({"error": "Number of questions must be between 1 and 20"}), 400
+
+    # Check if questions already exist
+    existing_questions = Question.query.filter_by(document_id=document_id).count()
+    if existing_questions > 0 and not regenerate:
+        return jsonify({
+            "error": "Questions already exist for this document. Use regenerate=true to replace them."
+        }), 400
+
+    # Delete existing questions if regenerating
+    if regenerate and existing_questions > 0:
+        Question.query.filter_by(document_id=document_id).delete()
+        db.session.commit()
+
+    minio_client = current_app.config['MINIO_CLIENT']
+    bucket_name = current_app.config['MINIO_BUCKET_NAME']
+
+    try:
+        # Get file content from MinIO
+        response = minio_client.get_object(bucket_name, document.file_name)
+        file_content = response.read().decode('utf-8')
+        response.close()
+        response.release_conn()
+
+        if not file_content or not file_content.strip():
+            return jsonify({"error": "Document file is empty"}), 400
+
+        # Generate questions using OpenAI
+        try:
+            questions_data = openai_service.generate_questions(file_content, num_questions)
+
+            if not questions_data:
+                return jsonify({"error": "Failed to generate questions"}), 500
+
+            # Save questions to database
+            created_questions = []
+            for q_data in questions_data:
+                question = Question(
+                    question_text=q_data.get('question_text'),
+                    option_a=q_data.get('option_a'),
+                    option_b=q_data.get('option_b'),
+                    option_c=q_data.get('option_c'),
+                    option_d=q_data.get('option_d'),
+                    correct_answer=q_data.get('correct_answer'),
+                    explanation=q_data.get('explanation'),
+                    chunk_index=q_data.get('chunk_index', 0),
+                    document_id=document_id
+                )
+                db.session.add(question)
+                created_questions.append(question)
+
+            db.session.commit()
+
+            # Return document with questions included
+            return jsonify(document.to_dict(include_questions=True)), 200
+
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"error": f"OpenAI API error: {str(e)}"}), 500
+
+    except S3Error as e:
+        return jsonify({"error": f"Failed to retrieve file from storage: {str(e)}"}), 500
+    except UnicodeDecodeError:
+        return jsonify({"error": "File content is not valid UTF-8 text"}), 400
+
+@documents_bp.route('/documents/<int:document_id>/questions', methods=['GET'])
+def get_questions(document_id):
+    """
+    Retrieve all questions for a document
+
+    param document_id: ID of the document
+
+    return: List of questions as JSON objects
+    """
+    document = Document.query.get_or_404(document_id)
+    questions = Question.query.filter_by(document_id=document_id).all()
+
+    return jsonify([question.to_dict() for question in questions]), 200

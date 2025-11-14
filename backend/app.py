@@ -5,6 +5,7 @@ from routes.documents import documents_bp
 from routes.notebooks import notebooks_bp
 from models.document import Document
 from models.notebook import Notebook
+from models.question import Question
 import os
 from dotenv import load_dotenv
 from minio import Minio

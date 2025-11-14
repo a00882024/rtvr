@@ -26,11 +26,14 @@ class Document(db.Model):
     # Foreign key: A document can belong to one notebook
     notebook_id = db.Column(db.Integer, db.ForeignKey('notebook.id'), nullable=True)
 
+    # Relationship: A document can have many questions
+    questions = db.relationship('Question', backref='document', lazy=True, cascade='all, delete-orphan')
+
     def __repr__(self):
         return f'<Document {self.title}>'
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_questions=False):
+        result = {
             'id': self.id,
             'title': self.title,
             'description': self.description,
@@ -42,4 +45,7 @@ class Document(db.Model):
             'summary': self.summary,
             'notebook_id': self.notebook_id
         }
+        if include_questions:
+            result['questions'] = [question.to_dict() for question in self.questions]
+        return result
 

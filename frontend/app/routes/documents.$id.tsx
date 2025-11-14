@@ -22,6 +22,8 @@ export default function DocumentDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [document, setDocument] = useState(initialDocument);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -49,6 +51,34 @@ export default function DocumentDetailPage() {
       alert(`Failed to generate summary: ${error instanceof Error ? error.message : 'Please try again.'}`);
     } finally {
       setIsGeneratingSummary(false);
+    }
+  };
+
+  const handleGenerateQuestions = async (regenerate: boolean = false) => {
+    setIsGeneratingQuestions(true);
+    setShowRegenerateModal(false);
+    try {
+      const updatedDocument = await api.generateDocumentQuestions(
+        document.id,
+        5,
+        regenerate
+      );
+      setDocument(updatedDocument);
+    } catch (error) {
+      console.error("Failed to generate questions:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Please try again.';
+      alert(`Failed to generate questions: ${errorMessage}`);
+    } finally {
+      setIsGeneratingQuestions(false);
+    }
+  };
+
+  const handleGenerateQuestionsClick = () => {
+    // Check if questions already exist
+    if (document.questions && document.questions.length > 0) {
+      setShowRegenerateModal(true);
+    } else {
+      handleGenerateQuestions(false);
     }
   };
 
@@ -233,6 +263,55 @@ export default function DocumentDetailPage() {
                     )}
                   </button>
                   <button
+                    onClick={handleGenerateQuestionsClick}
+                    disabled={isGeneratingQuestions}
+                    className="inline-flex items-center px-3 py-2 border border-green-300 dark:border-green-700 shadow-sm text-sm font-medium rounded-md text-green-700 dark:text-green-400 bg-white dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-green-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingQuestions ? (
+                      <>
+                        <svg
+                          className="animate-spin w-4 h-4 mr-2"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-4 h-4 mr-2"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        {document.questions && document.questions.length > 0
+                          ? "Regenerate Questions"
+                          : "Generate Questions"}
+                      </>
+                    )}
+                  </button>
+                  <button
                     onClick={() => setShowDeleteModal(true)}
                     className="inline-flex items-center px-3 py-2 border border-red-300 dark:border-red-700 shadow-sm text-sm font-medium rounded-md text-red-700 dark:text-red-400 bg-white dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                   >
@@ -284,6 +363,107 @@ export default function DocumentDetailPage() {
                   {document.summary}
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Questions Section */}
+        {document.questions && document.questions.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                <svg
+                  className="w-5 h-5 mr-2 text-green-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                Questions ({document.questions.length})
+              </h2>
+            </div>
+            <div className="p-6 space-y-6">
+              {document.questions.map((question, index) => (
+                <div
+                  key={question.id}
+                  className="bg-gray-50 dark:bg-gray-900 rounded-lg p-5 border border-gray-200 dark:border-gray-700"
+                >
+                  <div className="flex items-start gap-3 mb-4">
+                    <span className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 font-semibold text-sm">
+                      {index + 1}
+                    </span>
+                    <p className="text-gray-900 dark:text-white font-medium text-lg flex-1">
+                      {question.question_text}
+                    </p>
+                  </div>
+                  <div className="ml-11 space-y-2">
+                    {['A', 'B', 'C', 'D'].map((option) => {
+                      const optionKey = `option_${option.toLowerCase()}` as keyof typeof question;
+                      const optionText = question[optionKey] as string;
+                      const isCorrect = question.correct_answer === option;
+
+                      return (
+                        <div
+                          key={option}
+                          className={`flex items-start gap-3 p-3 rounded-md ${
+                            isCorrect
+                              ? 'bg-green-50 dark:bg-green-900/20 border-2 border-green-500'
+                              : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+                          }`}
+                        >
+                          <span
+                            className={`flex-shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold ${
+                              isCorrect
+                                ? 'bg-green-500 text-white'
+                                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            {option}
+                          </span>
+                          <p
+                            className={`flex-1 ${
+                              isCorrect
+                                ? 'text-green-900 dark:text-green-100 font-medium'
+                                : 'text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            {optionText}
+                          </p>
+                          {isCorrect && (
+                            <svg
+                              className="w-5 h-5 text-green-500 flex-shrink-0"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                              />
+                            </svg>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {question.explanation && (
+                    <div className="ml-11 mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                      <p className="text-sm text-blue-900 dark:text-blue-100">
+                        <span className="font-semibold">Explanation:</span>{' '}
+                        {question.explanation}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -354,6 +534,35 @@ export default function DocumentDetailPage() {
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
               >
                 {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Regenerate Questions Confirmation Modal */}
+      {showRegenerateModal && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Regenerate Questions
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              This document already has {document.questions?.length || 0} question(s).
+              Do you want to regenerate them? This will replace the existing questions.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowRegenerateModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleGenerateQuestions(true)}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                Regenerate
               </button>
             </div>
           </div>

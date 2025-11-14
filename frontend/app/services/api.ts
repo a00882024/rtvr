@@ -13,6 +13,20 @@ export interface Notebook {
   documents?: Document[];
 }
 
+export interface Question {
+  id: number;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_answer: 'A' | 'B' | 'C' | 'D';
+  explanation?: string;
+  chunk_index?: number;
+  document_id: number;
+  created_at?: string;
+}
+
 export interface Document {
   id: number;
   title: string;
@@ -23,6 +37,7 @@ export interface Document {
   file_size: number;
   processed: boolean;
   summary?: string;
+  questions?: Question[];
   notebook_id?: number;
   created_at?: string;
   updated_at?: string;
@@ -140,6 +155,27 @@ class ApiService {
     return this.fetchJson<Document>(`/v1/documents/${id}/summary`, {
       method: 'POST',
     });
+  }
+
+  async generateDocumentQuestions(
+    id: number,
+    numQuestions: number = 5,
+    regenerate: boolean = false
+  ): Promise<Document> {
+    const params = new URLSearchParams();
+    params.append('num_questions', numQuestions.toString());
+    params.append('regenerate', regenerate.toString());
+
+    return this.fetchJson<Document>(
+      `/v1/documents/${id}/questions?${params.toString()}`,
+      {
+        method: 'POST',
+      }
+    );
+  }
+
+  async getDocumentQuestions(id: number): Promise<Question[]> {
+    return this.fetchJson<Question[]>(`/v1/documents/${id}/questions`);
   }
 }
 
