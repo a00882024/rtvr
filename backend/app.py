@@ -64,7 +64,11 @@ app.register_blueprint(notebooks_bp, url_prefix='/v1')
 
 # Create database tables and MinIO bucket
 with app.app_context():
+    # Drop all tables and recreate them (for development)
+    # WARNING: This will delete all existing data
+    db.drop_all()
     db.create_all()
+    print("Database tables recreated successfully")
 
     # Create MinIO bucket if it doesn't exist
     try:

@@ -3,6 +3,7 @@ from werkzeug.utils import secure_filename
 from database import db
 from models.document import Document
 from minio.error import S3Error
+from services.openai_service import openai_service
 import os
 import io
 import uuid
@@ -209,3 +210,57 @@ def download_document(document_id):
         )
     except S3Error as e:
         return jsonify({"error": f"Failed to retrieve file: {str(e)}"}), 500
+
+@documents_bp.route('/documents/<int:document_id>/summary', methods=['POST'])
+def generate_summary(document_id):
+    """
+    Generate a summary for a document using OpenAI API
+
+    The summary is generated from the file content stored in MinIO bucket.
+    This endpoint can be called multiple times to regenerate the summary.
+
+    param document_id: ID of the document to generate summary for
+
+    return: The updated document with the generated summary
+    """
+    document = Document.query.get_or_404(document_id)
+
+    if not document.file_name:
+        return jsonify({"error": "Document has no associated file"}), 400
+
+    minio_client = current_app.config['MINIO_CLIENT']
+    bucket_name = current_app.config['MINIO_BUCKET_NAME']
+
+    try:
+        # Get file content from MinIO
+        response = minio_client.get_object(bucket_name, document.file_name)
+        file_content = response.read().decode('utf-8')
+        response.close()
+        response.release_conn()
+
+        if not file_content or not file_content.strip():
+            return jsonify({"error": "Document file is empty"}), 400
+
+        # Generate summary using OpenAI
+        try:
+            summary = openai_service.generate_summary(file_content)
+
+            if not summary:
+                return jsonify({"error": "Failed to generate summary"}), 500
+
+            # Update document with summary and mark as processed
+            document.summary = summary
+            document.processed = True
+            db.session.commit()
+
+            return jsonify(document.to_dict()), 200
+
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"error": f"OpenAI API error: {str(e)}"}), 500
+
+    except S3Error as e:
+        return jsonify({"error": f"Failed to retrieve file from storage: {str(e)}"}), 500
+    except UnicodeDecodeError:
+        return jsonify({"error": "File content is not valid UTF-8 text"}), 400

@@ -22,6 +22,7 @@ export interface Document {
   file_type: string;
   file_size: number;
   processed: boolean;
+  summary?: string;
   notebook_id?: number;
   created_at?: string;
   updated_at?: string;
@@ -132,6 +133,12 @@ class ApiService {
   async deleteDocument(id: number): Promise<{ message: string }> {
     return this.fetchJson<{ message: string }>(`/v1/documents/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async generateDocumentSummary(id: number): Promise<Document> {
+    return this.fetchJson<Document>(`/v1/documents/${id}/summary`, {
+      method: 'POST',
     });
   }
 }

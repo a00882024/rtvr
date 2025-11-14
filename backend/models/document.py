@@ -21,6 +21,7 @@ class Document(db.Model):
     file_type = db.Column(db.String(50), nullable=False)
     file_size = db.Column(db.Integer, nullable=False)
     processed = db.Column(db.Boolean, default=False)
+    summary = db.Column(db.Text, nullable=True)
 
     # Foreign key: A document can belong to one notebook
     notebook_id = db.Column(db.Integer, db.ForeignKey('notebook.id'), nullable=True)
@@ -38,6 +39,7 @@ class Document(db.Model):
             'file_type': self.file_type,
             'file_size': self.file_size,
             'processed': self.processed,
+            'summary': self.summary,
             'notebook_id': self.notebook_id
         }
 
