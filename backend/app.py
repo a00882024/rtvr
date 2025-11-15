@@ -3,9 +3,12 @@ from flask_cors import CORS
 from database import db
 from routes.documents import documents_bp
 from routes.notebooks import notebooks_bp
+from routes.quiz import quiz_bp
 from models.document import Document
 from models.notebook import Notebook
 from models.question import Question
+from models.quiz_attempt import QuizAttempt
+from models.quiz_answer import QuizAnswer
 import os
 from dotenv import load_dotenv
 from minio import Minio
@@ -62,12 +65,13 @@ db.init_app(app)
 # Register blueprints with v1 prefix
 app.register_blueprint(documents_bp, url_prefix='/v1')
 app.register_blueprint(notebooks_bp, url_prefix='/v1')
+app.register_blueprint(quiz_bp, url_prefix='/v1')
 
 # Create database tables and MinIO bucket
 with app.app_context():
     # Drop all tables and recreate them (for development)
     # WARNING: This will delete all existing data
-    db.drop_all()
+    # db.drop_all()
     db.create_all()
     print("Database tables recreated successfully")
 

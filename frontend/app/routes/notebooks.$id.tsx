@@ -4,8 +4,19 @@ import { api } from "~/services/api";
 import { useState } from "react";
 
 export async function loader({ params }: Route.LoaderArgs) {
-  const notebook = await api.getNotebook(Number(params.id), true);
-  return { notebook };
+  const notebookId = Number(params.id);
+  const [notebook, quizHistory] = await Promise.all([
+    api.getNotebook(notebookId, true),
+    api.getQuizHistory(notebookId),
+  ]);
+
+  // Count total questions across all documents
+  const totalQuestions = notebook.documents?.reduce(
+    (sum, doc) => sum + (doc.questions?.length || 0),
+    0
+  ) || 0;
+
+  return { notebook, quizHistory: quizHistory.quiz_attempts, totalQuestions };
 }
 
 export function meta({}: Route.MetaArgs) {
@@ -28,10 +39,11 @@ const colorClasses: Record<string, string> = {
 };
 
 export default function NotebookDetailPage() {
-  const { notebook } = useLoaderData<typeof loader>();
+  const { notebook, quizHistory, totalQuestions } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isStartingQuiz, setIsStartingQuiz] = useState(false);
 
   const colorClass = notebook.color_tag
     ? colorClasses[notebook.color_tag] || "bg-gray-500"
@@ -46,6 +58,20 @@ export default function NotebookDetailPage() {
       console.error("Failed to delete notebook:", error);
       alert("Failed to delete notebook. Please try again.");
       setIsDeleting(false);
+    }
+  };
+
+  const handleStartQuiz = async () => {
+    setIsStartingQuiz(true);
+    try {
+      const response = await api.startQuiz(notebook.id);
+      navigate(`/notebooks/${notebook.id}/quiz/${response.quiz_attempt.id}`, {
+        state: { questions: response.questions }
+      });
+    } catch (error) {
+      console.error("Failed to start quiz:", error);
+      alert("Failed to start quiz. Please try again.");
+      setIsStartingQuiz(false);
     }
   };
 
@@ -157,6 +183,100 @@ export default function NotebookDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Quiz Section */}
+        {totalQuestions > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-8">
+            <div className="p-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Quiz
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {totalQuestions} question{totalQuestions !== 1 ? 's' : ''} available
+                  </p>
+                </div>
+                <button
+                  onClick={handleStartQuiz}
+                  disabled={isStartingQuiz}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                    />
+                  </svg>
+                  {isStartingQuiz ? 'Starting...' : 'Take Quiz'}
+                </button>
+              </div>
+
+              {/* Quiz History */}
+              {quizHistory.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                    Recent Attempts
+                  </h3>
+                  <div className="space-y-2">
+                    {quizHistory.map((attempt) => (
+                      <Link
+                        key={attempt.id}
+                        to={`/notebooks/${notebook.id}/quiz/${attempt.id}/results`}
+                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                            attempt.score !== undefined && attempt.score / attempt.total_questions >= 0.8
+                              ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                              : attempt.score !== undefined && attempt.score / attempt.total_questions >= 0.6
+                              ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                              : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                          }`}>
+                            <span className="text-sm font-semibold">
+                              {attempt.score !== undefined ? `${attempt.score}/${attempt.total_questions}` : '-'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {attempt.score !== undefined
+                                ? `${Math.round((attempt.score / attempt.total_questions) * 100)}%`
+                                : 'In Progress'}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {new Date(attempt.started_at).toLocaleDateString()} at{' '}
+                              {new Date(attempt.started_at).toLocaleTimeString()}
+                            </p>
+                          </div>
+                        </div>
+                        <svg
+                          className="w-5 h-5 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5l7 7-7 7"
+                          />
+                        </svg>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Documents Section */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">

@@ -27,6 +27,47 @@ export interface Question {
   created_at?: string;
 }
 
+export interface QuizAttempt {
+  id: number;
+  notebook_id: number;
+  score?: number;
+  total_questions: number;
+  started_at: string;
+  completed_at?: string;
+  is_completed: boolean;
+  answers?: QuizAnswer[];
+}
+
+export interface QuizAnswer {
+  id: number;
+  quiz_attempt_id: number;
+  question_id: number;
+  selected_answer: 'A' | 'B' | 'C' | 'D';
+  is_correct: boolean;
+  answered_at: string;
+  question?: Question;
+}
+
+export interface StartQuizResponse {
+  quiz_attempt: QuizAttempt;
+  questions: Question[];
+}
+
+export interface SubmitAnswerResponse {
+  answer: QuizAnswer;
+  is_correct: boolean;
+}
+
+export interface CompleteQuizResponse {
+  quiz_attempt: QuizAttempt;
+  score: number;
+  total_questions: number;
+}
+
+export interface QuizHistoryResponse {
+  quiz_attempts: QuizAttempt[];
+}
+
 export interface Document {
   id: number;
   title: string;
@@ -176,6 +217,61 @@ class ApiService {
 
   async getDocumentQuestions(id: number): Promise<Question[]> {
     return this.fetchJson<Question[]>(`/v1/documents/${id}/questions`);
+  }
+
+  // Quiz API
+  async startQuiz(notebookId: number): Promise<StartQuizResponse> {
+    return this.fetchJson<StartQuizResponse>(
+      `/v1/notebooks/${notebookId}/quiz/start`,
+      {
+        method: 'POST',
+      }
+    );
+  }
+
+  async submitQuizAnswer(
+    notebookId: number,
+    attemptId: number,
+    questionId: number,
+    selectedAnswer: 'A' | 'B' | 'C' | 'D'
+  ): Promise<SubmitAnswerResponse> {
+    return this.fetchJson<SubmitAnswerResponse>(
+      `/v1/notebooks/${notebookId}/quiz/${attemptId}/answer`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          question_id: questionId,
+          selected_answer: selectedAnswer,
+        }),
+      }
+    );
+  }
+
+  async completeQuiz(
+    notebookId: number,
+    attemptId: number
+  ): Promise<CompleteQuizResponse> {
+    return this.fetchJson<CompleteQuizResponse>(
+      `/v1/notebooks/${notebookId}/quiz/${attemptId}/complete`,
+      {
+        method: 'POST',
+      }
+    );
+  }
+
+  async getQuizAttempt(
+    notebookId: number,
+    attemptId: number
+  ): Promise<QuizAttempt> {
+    return this.fetchJson<QuizAttempt>(
+      `/v1/notebooks/${notebookId}/quiz/${attemptId}`
+    );
+  }
+
+  async getQuizHistory(notebookId: number): Promise<QuizHistoryResponse> {
+    return this.fetchJson<QuizHistoryResponse>(
+      `/v1/notebooks/${notebookId}/quiz/history`
+    );
   }
 }
 

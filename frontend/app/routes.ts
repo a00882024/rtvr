@@ -7,6 +7,8 @@ export default [
   route("notebooks/:id", "routes/notebooks.$id.tsx"),
   route("notebooks/:id/edit", "routes/notebooks.$id.edit.tsx"),
   route("notebooks/:id/documents/new", "routes/notebooks.$id.documents.new.tsx"),
+  route("notebooks/:id/quiz/:attemptId", "routes/notebooks.$id.quiz.$attemptId.tsx"),
+  route("notebooks/:id/quiz/:attemptId/results", "routes/notebooks.$id.quiz.$attemptId.results.tsx"),
   route("documents", "routes/documents.tsx"),
   route("documents/:id", "routes/documents.$id.tsx"),
 ] satisfies RouteConfig;

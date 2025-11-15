@@ -19,8 +19,9 @@ class Notebook(db.Model):
     color_tag = db.Column(db.String(50), nullable=True)
     document_count = db.Column(db.Integer, nullable=False, default=0)
 
-    # Relationship: A notebook can have many documents
+    # Relationships
     documents = db.relationship('Document', backref='notebook', lazy=True, cascade='all, delete-orphan')
+    quiz_attempts = db.relationship('QuizAttempt', backref='notebook', lazy=True, cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Notebook {self.title}>'
@@ -36,5 +37,5 @@ class Notebook(db.Model):
             'document_count': self.document_count
         }
         if include_documents:
-            result['documents'] = [doc.to_dict() for doc in self.documents]
+            result['documents'] = [doc.to_dict(include_questions=True) for doc in self.documents]
         return result
