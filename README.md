@@ -1,6 +1,6 @@
 # RTVR - Sistema de Gestión de Documentos y Notebooks
 
-RTVR es un sistema de gestión de documentos y notebooks construido con Flask (backend), PostgreSQL (base de datos), MinIO (almacenamiento de objetos) y React Router v7 (frontend). La aplicación permite a los usuarios organizar documentos dentro de notebooks, con soporte para procesamiento de documentos y gestión de metadatos.
+RTVR es un sistema inteligente de gestión de documentos y notebooks construido con Flask (backend), PostgreSQL (base de datos), MinIO (almacenamiento de objetos) y React Router v7 (frontend). La aplicación no solo permite a los usuarios organizar documentos dentro de notebooks, sino que también integra capacidades de IA para generar resúmenes automáticos y cuestionarios de opción múltiple a partir del contenido de los documentos, convirtiendo el material de estudio en una experiencia de aprendizaje interactiva.
 
 ## Características
 
@@ -16,68 +16,60 @@ RTVR es un sistema de gestión de documentos y notebooks construido con Flask (b
 ### Diagrama de Arquitectura
 
 ```mermaid
-graph TB
-    subgraph "Cliente"
-        Browser[Navegador Web]
+graph TD
+    subgraph Cliente
+        Browser[("Navegador Web")]
     end
 
-    subgraph "Frontend - React Router v7"
-        UI[Interfaz de Usuario]
-        Routes[Rutas]
-        API_Client[Cliente API]
+    subgraph Frontend [React]
+        direction LR
+        UI[Interfaz de Usuario] --> Routes[React Router]
+        Routes --> API_Client[Cliente API]
     end
 
-    subgraph "Backend - Flask"
+    subgraph Backend [Backend - Flask]
+        direction TB
         Flask_App[Aplicación Flask]
-        Blueprints[Blueprints]
 
-        subgraph "Blueprints"
-            Notebooks_BP[Notebooks Routes]
-            Documents_BP[Documents Routes]
+        subgraph Blueprints
+            direction LR
+            Notebooks_BP[Notebooks]
+            Documents_BP[Documents]
+            Quiz_BP[Quiz]
         end
 
-        subgraph "Models"
-            Notebook_Model[Notebook Model]
-            Document_Model[Document Model]
+        subgraph Services
+            OpenAI_Service[Servicio OpenAI]
         end
 
-        SQLAlchemy[SQLAlchemy ORM]
-        MinIO_Client[Cliente MinIO]
+        Flask_App --> Blueprints
+        Documents_BP --> OpenAI_Service
+        Documents_BP --> MinIO_Client[Cliente MinIO]
+        Blueprints --> SQLAlchemy[ORM]
     end
 
-    subgraph "Infraestructura - Docker"
-        PostgreSQL[(PostgreSQL 15)]
-        MinIO_Storage[MinIO Object Storage]
-        MinIO_Console[MinIO Console]
+    subgraph "Servicios Externos"
+        OpenAI_API[("OpenAI API")]
+    end
+
+    subgraph "Infraestructura (Docker)"
+        direction TB
+        PostgreSQL[("PostgreSQL DB")]
+        MinIO_Storage[("MinIO Storage")]
     end
 
     Browser --> UI
-    UI --> Routes
-    Routes --> API_Client
-    API_Client -->|HTTP/REST API v1| Flask_App
+    API_Client -- HTTP/REST API --> Flask_App
+    SQLAlchemy -- SQL --> PostgreSQL
+    MinIO_Client -- S3 API --> MinIO_Storage
+    OpenAI_Service -- Llamada API --> OpenAI_API
 
-    Flask_App --> Blueprints
-    Blueprints --> Notebooks_BP
-    Blueprints --> Documents_BP
-
-    Notebooks_BP --> Notebook_Model
-    Documents_BP --> Document_Model
-    Documents_BP --> MinIO_Client
-
-    Notebook_Model --> SQLAlchemy
-    Document_Model --> SQLAlchemy
-
-    SQLAlchemy -->|SQL Queries| PostgreSQL
-    MinIO_Client -->|S3 API| MinIO_Storage
-
-    MinIO_Storage -.->|Gestión| MinIO_Console
-
-    style Browser fill:#e1f5ff
-    style UI fill:#fff3cd
-    style Flask_App fill:#d4edda
-    style PostgreSQL fill:#f8d7da
-    style MinIO_Storage fill:#d1ecf1
-    style MinIO_Console fill:#d1ecf1
+    style Browser fill:#e1f5ff,stroke:#333,stroke-width:2px
+    style UI fill:#fff3cd,stroke:#333,stroke-width:2px
+    style Flask_App fill:#d4edda,stroke:#333,stroke-width:2px
+    style PostgreSQL fill:#f8d7da,stroke:#333,stroke-width:2px
+    style MinIO_Storage fill:#d1ecf1,stroke:#333,stroke-width:2px
+    style OpenAI_API fill:#e2e2e2,stroke:#333,stroke-width:2px
 ```
 
 ### Flujo de Datos
@@ -89,16 +81,17 @@ sequenceDiagram
     participant API as Flask API
     participant DB as PostgreSQL
     participant S3 as MinIO
+    participant AI as OpenAI API
 
-    Note over U,S3: Crear Notebook
+    Note over U,AI: Crear Notebook
     U->>F: Completa formulario de notebook
     F->>API: POST /v1/notebooks
     API->>DB: INSERT notebook
     DB-->>API: Notebook creado
     API-->>F: JSON response
     F-->>U: Muestra notebook creado
-
-    Note over U,S3: Subir Documento
+    
+    Note over U,AI: Subir Documento
     U->>F: Selecciona archivo .txt
     F->>API: POST /v1/documents (FormData)
     API->>S3: PUT object (archivo)
@@ -107,8 +100,54 @@ sequenceDiagram
     DB-->>API: Document creado
     API-->>F: JSON response
     F-->>U: Muestra documento creado
+    
+    Note over U,AI: Generar Resumen con IA
+    U->>F: Click en "Generar Resumen"
+    F->>API: POST /v1/documents/:id/summary
+    API->>S3: GET object (contenido del archivo)
+    S3-->>API: Contenido del archivo
+    API->>AI: Solicita resumen del contenido
+    AI-->>API: Resumen generado
+    API->>DB: UPDATE document SET summary = ...
+    DB-->>API: Confirmación de actualización
+    API-->>F: JSON con documento actualizado
+    F-->>U: Muestra el resumen generado
 
-    Note over U,S3: Descargar Documento
+    Note over U,AI: Generar Cuestionario con IA
+    U->>F: Click en "Generar Preguntas"
+    F->>API: POST /v1/documents/:id/questions
+    API->>S3: GET object (contenido del archivo)
+    S3-->>API: Contenido del archivo
+    API->>AI: Solicita preguntas del contenido
+    AI-->>API: Preguntas generadas (JSON)
+    API->>DB: INSERT questions
+    DB-->>API: Confirmación de creación
+    API-->>F: JSON con documento y preguntas
+    F-->>U: Muestra las preguntas generadas
+
+    Note over U,AI: Realizar Cuestionario
+    U->>F: Click en "Iniciar Cuestionario"
+    F->>API: POST /v1/notebooks/:id/quiz/start
+    API->>DB: CREATE QuizAttempt, SELECT questions
+    DB-->>API: Attempt y lista de preguntas
+    API-->>F: Inicia el cuestionario
+
+    loop Para cada pregunta
+        U->>F: Selecciona una respuesta y envía
+        F->>API: POST .../quiz/:attemptId/answer
+        API->>DB: VALIDATE y SAVE answer
+        DB-->>API: Respuesta validada
+        API-->>F: Retroalimentación (correcta/incorrecta)
+    end
+
+    U->>F: Termina el cuestionario
+    F->>API: POST .../quiz/:attemptId/complete
+    API->>DB: UPDATE QuizAttempt (calcula score)
+    DB-->>API: Attempt finalizado con score
+    API-->>F: Muestra pantalla de resultados
+    F-->>U: Revisa su puntuación final
+
+    Note over U,AI: Descargar Documento
     U->>F: Click en descargar
     F->>API: GET /v1/documents/:id/download
     API->>DB: SELECT document metadata
@@ -117,22 +156,29 @@ sequenceDiagram
     S3-->>API: Contenido del archivo
     API-->>F: Archivo
     F-->>U: Descarga archivo
+
 ```
 
 ### Backend (Flask)
 
 El backend sigue una arquitectura Flask modular:
 
-- **app.py** - Punto de entrada principal que inicializa Flask, SQLAlchemy, MinIO y registra blueprints
-- **database.py** - Instancia singleton de SQLAlchemy
-- **models/** - Modelos de base de datos:
-  - `document.py` - Modelo de documentos con campos: title, description, extracted_content, file_name, file_type, file_size, processed, notebook_id
-  - `notebook.py` - Modelo de notebooks con campos: title, description, visibility, subject, color_tag, document_count
-- **routes/** - Endpoints de API basados en blueprints:
-  - `documents.py` - Operaciones CRUD para documentos
-  - `notebooks.py` - Operaciones CRUD para notebooks
+- **app.py** - Punto de entrada que inicializa Flask, SQLAlchemy, MinIO y registra los blueprints.
+- **database.py** - Instancia singleton de SQLAlchemy para la gestión de la base de datos.
+- **services/** - Lógica de negocio y servicios externos:
+  - `openai_service.py` - Gestiona las interacciones con la API de OpenAI para generar resúmenes y preguntas.
+- **models/** - Modelos de datos SQLAlchemy:
+  - `notebook.py` - Modelo para los notebooks.
+  - `document.py` - Modelo para los documentos, que puede contener un resumen (`summary`).
+  - `question.py` - Modelo para las preguntas de opción múltiple generadas por IA para un documento.
+  - `quiz_attempt.py` - Registra un intento de cuestionario realizado por un usuario en un notebook.
+  - `quiz_answer.py` - Almacena la respuesta de un usuario a una pregunta específica durante un intento.
+- **routes/** - Endpoints de la API organizados en blueprints:
+  - `notebooks.py` - Operaciones CRUD para notebooks.
+  - `documents.py` - CRUD para documentos y endpoints para la generación de resúmenes (`/summary`) y preguntas (`/questions`).
+  - `quiz.py` - Endpoints para iniciar, responder y completar cuestionarios.
 
-**Relación**: Un notebook puede tener muchos documentos (uno a muchos). Eliminar un notebook elimina en cascada todos sus documentos.
+**Relaciones**: Un `Notebook` tiene muchos `Document`. Un `Document` tiene muchas `Question`. Un `Notebook` tiene muchos `QuizAttempt`. Un `QuizAttempt` tiene muchas `QuizAnswer`. Al eliminar un notebook, se eliminan en cascada todos sus componentes asociados.
 
 ### Base de Datos
 
@@ -166,7 +212,7 @@ El backend sigue una arquitectura Flask modular:
 ### 1. Clonar el Repositorio
 
 ```bash
-git clone <url-del-repositorio>
+git clone <URL_DEL_REPOSITORIO>
 cd rtvr
 ```
 
@@ -192,10 +238,13 @@ pip install -r requirements.txt
 
 Las variables de entorno ya están configuradas en `backend/.env`:
 
+**Nota Importante**: Para que las funcionalidades de IA (resúmenes y cuestionarios) funcionen, debes agregar tu propia `OPENAI_API_KEY`.
+
 ```env
 # Configuración de Base de Datos
 DB_USER=rtvr_user
 DB_PASSWORD=rtvr_password
+# Usa 127.0.0.1 o localhost si ejecutas el backend localmente y la BD en Docker
 DB_HOST=127.0.0.1
 DB_PORT=55432
 DB_NAME=rtvr_db
@@ -205,11 +254,15 @@ UPLOAD_FOLDER=uploads
 MAX_FILE_SIZE=16777216
 
 # Configuración de MinIO
+# Usa 127.0.0.1 o localhost si ejecutas el backend localmente y MinIO en Docker
 MINIO_ENDPOINT=127.0.0.1:9000
 MINIO_ACCESS_KEY=rtvr_minio
 MINIO_SECRET_KEY=rtvr_minio_password
 MINIO_BUCKET_NAME=rtvr-documents
 MINIO_SECURE=False
+
+# Clave de API de OpenAI (requerida para resúmenes y cuestionarios)
+OPENAI_API_KEY=<TU_API_KEY_DE_OPENAI>
 ```
 
 ### 4. Iniciar Servicios con Docker
@@ -288,24 +341,45 @@ Todos los endpoints están prefijados con `/v1`:
 - `PUT /v1/documents/<id>` - Actualizar documento
 - `DELETE /v1/documents/<id>` - Eliminar documento (también elimina de MinIO)
 - `GET /v1/documents/<id>/download` - Descargar archivo del documento
+- `GET /v1/documents/<id>/content` - Obtener el contenido de texto extraído del documento
+
+#### Funcionalidades de IA (Documentos)
+
+- `POST /v1/documents/<id>/summary` - Generar un resumen para un documento
+- `POST /v1/documents/<id>/questions` - Generar preguntas de opción múltiple para un documento
+- `GET /v1/documents/<id>/questions` - Obtener las preguntas existentes de un documento
+
+#### Cuestionarios (Quiz)
+
+- `POST /v1/notebooks/<id>/quiz/start` - Iniciar un nuevo intento de cuestionario para un notebook
+- `POST /v1/notebooks/<id>/quiz/<attemptId>/answer` - Enviar una respuesta para una pregunta
+- `POST /v1/notebooks/<id>/quiz/<attemptId>/complete` - Finalizar un intento de cuestionario y calcular la puntuación
+- `GET /v1/notebooks/<id>/quiz/history` - Obtener el historial de intentos de un notebook
+- `GET /v1/notebooks/<id>/quiz/<attemptId>` - Obtener los detalles de un intento específico
 
 ## Estructura del Proyecto
 
-```
+```bash
 rtvr/
 ├── backend/
-│   ├── models/
+│   ├── models/              # Modelos de SQLAlchemy
 │   │   ├── document.py
-│   │   └── notebook.py
-│   ├── routes/
+│   │   ├── notebook.py
+│   │   ├── question.py
+│   │   ├── quiz_answer.py
+│   │   └── quiz_attempt.py
+│   ├── routes/              # Blueprints de la API
 │   │   ├── documents.py
-│   │   └── notebooks.py
+│   │   ├── notebooks.py
+│   │   └── quiz.py
+│   ├── services/            # Lógica de negocio y servicios externos
+│   │   └── openai_service.py
 │   ├── app.py
 │   ├── database.py
 │   ├── requirements.txt
 │   └── .env
 ├── frontend/
-│   ├── app/
+│   ├── app/                 # Código fuente de React
 │   │   ├── routes/
 │   │   │   ├── home.tsx
 │   │   │   ├── notebooks.tsx
@@ -313,12 +387,13 @@ rtvr/
 │   │   │   ├── notebooks.$id.tsx
 │   │   │   ├── notebooks.$id.edit.tsx
 │   │   │   ├── notebooks.$id.documents.new.tsx
+│   │   │   ├── notebooks.$id.quiz.history.tsx
+│   │   │   ├── notebooks.$id.quiz.tsx
 │   │   │   ├── documents.tsx
 │   │   │   └── documents.$id.tsx
 │   │   ├── services/
 │   │   │   └── api.ts
 │   │   ├── root.tsx
-│   │   └── routes.ts
 │   ├── package.json
 │   └── tailwind.config.ts
 ├── docker-compose.yml
@@ -329,12 +404,13 @@ rtvr/
 ## Tecnologías Utilizadas
 
 ### Backend
-- Flask 3.1.2
-- Flask-SQLAlchemy 3.1.1
-- Flask-CORS 5.0.0
-- PostgreSQL (psycopg2-binary 2.9.10)
-- MinIO 7.2.15
-- Python-dotenv 1.0.1
+- Flask 3.x
+- Flask-SQLAlchemy 3.x
+- Flask-CORS 5.x
+- PostgreSQL (psycopg2-binary)
+- MinIO SDK for Python
+- OpenAI Python Library
+- Python-dotenv
 
 ### Frontend
 - React Router v7
@@ -346,6 +422,7 @@ rtvr/
 - Docker & Docker Compose
 - PostgreSQL 15 Alpine
 - MinIO (última versión)
+- OpenAI API (para resúmenes y cuestionarios)
 
 ## Desarrollo
 
